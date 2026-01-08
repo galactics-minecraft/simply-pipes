@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": ["RIR", "IHI", "RIR"],
+  "key": {
+    "I": { "item": "minecraft:iron_ingot" },
+    "H": { "item": "minecraft:hopper" },
+    "R": { "item": "minecraft:redstone" }
+  },
+  "result": {
+    "id": "simply-pipes:iron_upgrade",
+    "count": 1
+  }
+}

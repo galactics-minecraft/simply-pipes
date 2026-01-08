@@ -1,0 +1,77 @@
+{
+  "multipart": [
+    { "apply": { "model": "simply-pipes:block/pipe" } },
+    {
+      "when": { "north": "destination" },
+      "apply": { "model": "simply-pipes:block/pipe_part", "uvlock": false }
+    },
+    {
+      "when": { "north": "source" },
+      "apply": { "model": "simply-pipes:block/pipe_part", "uvlock": false }
+    },
+    {
+      "when": { "north": "source" },
+      "apply": { "model": "simply-pipes:block/pipe_extract", "uvlock": false }
+    },
+    {
+      "when": { "east": "destination" },
+      "apply": { "model": "simply-pipes:block/pipe_part", "y": 90, "uvlock": false }
+    },
+    {
+      "when": { "east": "source" },
+      "apply": { "model": "simply-pipes:block/pipe_part", "y": 90, "uvlock": false }
+    },
+    {
+      "when": { "east": "source" },
+      "apply": { "model": "simply-pipes:block/pipe_extract", "y": 90, "uvlock": false }
+    },
+    {
+      "when": { "south": "destination" },
+      "apply": { "model": "simply-pipes:block/pipe_part", "y": 180, "uvlock": false }
+    },
+    {
+      "when": { "south": "source" },
+      "apply": { "model": "simply-pipes:block/pipe_part", "y": 180, "uvlock": false }
+    },
+    {
+      "when": { "south": "source" },
+      "apply": { "model": "simply-pipes:block/pipe_extract", "y": 180, "uvlock": false }
+    },
+    {
+      "when": { "west": "destination" },
+      "apply": { "model": "simply-pipes:block/pipe_part", "y": 270, "uvlock": false }
+    },
+    {
+      "when": { "west": "source" },
+      "apply": { "model": "simply-pipes:block/pipe_part", "y": 270, "uvlock": false }
+    },
+    {
+      "when": { "west": "source" },
+      "apply": { "model": "simply-pipes:block/pipe_extract", "y": 270, "uvlock": false }
+    },
+    {
+      "when": { "up": "destination" },
+      "apply": { "model": "simply-pipes:block/pipe_part", "x": 270, "uvlock": false }
+    },
+    {
+      "when": { "up": "source" },
+      "apply": { "model": "simply-pipes:block/pipe_part", "x": 270, "uvlock": false }
+    },
+    {
+      "when": { "up": "source" },
+      "apply": { "model": "simply-pipes:block/pipe_extract", "x": 270, "uvlock": false }
+    },
+    {
+      "when": { "down": "destination" },
+      "apply": { "model": "simply-pipes:block/pipe_part", "x": 90, "uvlock": false }
+    },
+    {
+      "when": { "down": "source" },
+      "apply": { "model": "simply-pipes:block/pipe_part", "x": 90, "uvlock": false }
+    },
+    {
+      "when": { "down": "source" },
+      "apply": { "model": "simply-pipes:block/pipe_extract", "x": 90, "uvlock": false }
+    }
+  ]
+}

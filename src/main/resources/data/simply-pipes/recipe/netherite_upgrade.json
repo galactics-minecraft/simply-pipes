@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": ["RDR", "HNH", "RDR"],
+  "key": {
+    "N": { "item": "minecraft:netherite_ingot" },
+    "D": { "item": "minecraft:diamond" },
+    "H": { "item": "minecraft:hopper" },
+    "R": { "item": "minecraft:redstone" }
+  },
+  "result": {
+    "id": "simply-pipes:netherite_upgrade",
+    "count": 1
+  }
+}

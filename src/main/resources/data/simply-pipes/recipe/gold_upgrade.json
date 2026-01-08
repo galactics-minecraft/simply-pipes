@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": ["RGR", "GHG", "RGR"],
+  "key": {
+    "G": { "item": "minecraft:gold_ingot" },
+    "H": { "item": "minecraft:hopper" },
+    "R": { "item": "minecraft:redstone" }
+  },
+  "result": {
+    "id": "simply-pipes:gold_upgrade",
+    "count": 1
+  }
+}
