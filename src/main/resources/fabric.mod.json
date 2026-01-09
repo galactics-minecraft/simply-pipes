@@ -14,7 +14,8 @@
   "environment": "*",
   "entrypoints": {
     "main": ["com.omarlawatey.SimplyPipes"],
-    "fabric-datagen": ["com.omarlawatey.SimplyPipesDataGenerator"]
+    "fabric-datagen": ["com.omarlawatey.SimplyPipesDataGenerator"],
+    "jade": ["com.omarlawatey.compat.jade.JadePlugin"]
   },
   "depends": {
     "fabricloader": ">=0.18.4",

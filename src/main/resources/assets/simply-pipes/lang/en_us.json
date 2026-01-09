@@ -5,5 +5,9 @@
   "item.simply-pipes.iron_upgrade": "Iron Upgrade",
   "item.simply-pipes.gold_upgrade": "Gold Upgrade",
   "item.simply-pipes.diamond_upgrade": "Diamond Upgrade",
-  "item.simply-pipes.netherite_upgrade": "Netherite Upgrade"
+  "item.simply-pipes.netherite_upgrade": "Netherite Upgrade",
+  "simplypipes.jade.sources": "§aSources: %s",
+  "simplypipes.jade.destinations": "§bDestinations: %s",
+  "simplypipes.jade.locked": "§cLocked: %s",
+  "simplypipes.jade.upgrades": "§6Upgrades:"
 }
