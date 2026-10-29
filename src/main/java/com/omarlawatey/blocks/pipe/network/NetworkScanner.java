@@ -13,29 +13,39 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
 
+import org.jetbrains.annotations.Nullable;
+
 import java.util.*;
 
 public class NetworkScanner {
   private static final Direction[] DIRECTIONS = Direction.values();
 
-  private record PosState(BlockPos pos, BlockState state) {
+  /**
+   * Internal record to track position, state, and the current active filter
+   * during BFS traversal
+   */
+  private record TraversalEntry(BlockPos pos, BlockState state, @Nullable DestinationFilter activeFilter) {
   }
 
   public static List<DestinationAccess> findDestinations(Level level, BlockPos startPos) {
     List<DestinationAccess> destinations = new ArrayList<>();
     Set<BlockPos> visited = new HashSet<>();
-    Queue<PosState> toVisit = new ArrayDeque<>();
+    Queue<TraversalEntry> toVisit = new ArrayDeque<>();
 
     BlockState startState = level.getBlockState(startPos);
-    toVisit.add(new PosState(startPos, startState));
+    toVisit.add(new TraversalEntry(startPos, startState, null));
     visited.add(startPos);
 
     while (!toVisit.isEmpty()) {
-      PosState current = toVisit.poll();
+      TraversalEntry current = toVisit.poll();
 
       if (!(current.state.getBlock() instanceof Pipe)) {
         continue;
       }
+
+      // Get this pipe's block entity to check for filters
+      BlockEntity currentBe = level.getBlockEntity(current.pos);
+      PipeBlockEntity currentPipe = currentBe instanceof PipeBlockEntity ? (PipeBlockEntity) currentBe : null;
 
       for (Direction dir : DIRECTIONS) {
         EnumProperty<PipeSideState> prop = Pipe.getPropertyFor(dir);
@@ -59,14 +69,36 @@ public class NetworkScanner {
 
           if (neighborSideState != PipeSideState.NONE) {
             visited.add(neighborPos);
-            toVisit.add(new PosState(neighborPos, neighborState));
+
+            // Determine the filter to propagate
+            // If this destination connection has a filter, use it;
+            // otherwise, inherit the current active filter
+            DestinationFilter filterToPropagate = current.activeFilter;
+            if (sideState == PipeSideState.DESTINATION && currentPipe != null) {
+              DestinationFilter connectionFilter = currentPipe.getDestinationFilter(dir);
+              if (connectionFilter != null && !connectionFilter.isEmpty()) {
+                filterToPropagate = connectionFilter;
+              }
+            }
+
+            toVisit.add(new TraversalEntry(neighborPos, neighborState, filterToPropagate));
           }
         } else if (sideState == PipeSideState.DESTINATION) {
           Direction accessDir = dir.getOpposite();
           Storage<ItemVariant> storage = ItemStorage.SIDED.find(level, neighborPos, accessDir);
           if (storage != null) {
             visited.add(neighborPos);
-            destinations.add(new DestinationAccess(neighborPos, accessDir));
+
+            // Check if this destination connection has a filter
+            DestinationFilter filterForDestination = current.activeFilter;
+            if (currentPipe != null) {
+              DestinationFilter connectionFilter = currentPipe.getDestinationFilter(dir);
+              if (connectionFilter != null && !connectionFilter.isEmpty()) {
+                filterForDestination = connectionFilter;
+              }
+            }
+
+            destinations.add(new DestinationAccess(neighborPos, accessDir, filterForDestination));
           }
         }
       }

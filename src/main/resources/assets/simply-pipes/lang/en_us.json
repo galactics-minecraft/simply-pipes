@@ -9,5 +9,9 @@
   "simplypipes.jade.sources": "§aSources: %s",
   "simplypipes.jade.destinations": "§bDestinations: %s",
   "simplypipes.jade.locked": "§cLocked: %s",
-  "simplypipes.jade.upgrades": "§6Upgrades:"
+  "simplypipes.jade.upgrades": "§6Upgrades:",
+  "simplypipes.jade.filters": "§dFilters:",
+  "simplypipes.gui.filter.title": "Destination Filter",
+  "simplypipes.gui.filter.whitelist": "Whitelist",
+  "simplypipes.gui.filter.blacklist": "Blacklist"
 }

@@ -1,16 +1,24 @@
 package com.omarlawatey.blocks.pipe;
 
+import com.omarlawatey.blocks.pipe.filter.DestinationFilterMenu;
 import com.omarlawatey.blocks.pipe.upgrade.PipeUpgrade;
 import com.omarlawatey.blocks.pipe.upgrade.PipeUpgradeType;
 import com.omarlawatey.utils.ModItems;
+import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.fabricmc.fabric.api.transfer.v1.item.ItemStorage;
 import net.fabricmc.fabric.api.transfer.v1.item.ItemVariant;
 import net.fabricmc.fabric.api.transfer.v1.storage.Storage;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Containers;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
@@ -162,6 +170,10 @@ public class Pipe extends Block implements EntityBlock, SimpleWaterloggedBlock {
         if (currentSideState == PipeSideState.SOURCE) {
           dropUpgradeAt(world, pos, pipeEntity, dir);
         }
+        // Clear destination filter when connection is removed
+        if (currentSideState == PipeSideState.DESTINATION) {
+          pipeEntity.clearDestinationFilter(dir);
+        }
 
         if (pipeEntity.isDirectionLocked(dir)) {
           pipeEntity.unlockDirection(dir);
@@ -184,6 +196,10 @@ public class Pipe extends Block implements EntityBlock, SimpleWaterloggedBlock {
         if (be instanceof PipeBlockEntity pipeEntity) {
           if (currentSideState == PipeSideState.SOURCE) {
             dropUpgradeAt(world, pos, pipeEntity, dir);
+          }
+          // Clear destination filter when connection is removed
+          if (currentSideState == PipeSideState.DESTINATION) {
+            pipeEntity.clearDestinationFilter(dir);
           }
           pipeEntity.invalidateNetworkCache();
         }
@@ -262,20 +278,106 @@ public class Pipe extends Block implements EntityBlock, SimpleWaterloggedBlock {
   }
 
   @Override
+  protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level world, BlockPos pos,
+      Player player, InteractionHand hand, BlockHitResult hit) {
+    if (world.isClientSide())
+      return ItemInteractionResult.SUCCESS;
+
+    if (stack.is(ModItems.WRENCH)) {
+      InteractionResult result = handleWrenchInteraction(state, world, pos, player, hit);
+      return result == InteractionResult.CONSUME ? ItemInteractionResult.CONSUME
+          : ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+    }
+
+    PipeUpgradeType upgradeType = PipeUpgradeType.fromItem(stack.getItem());
+    if (upgradeType != null) {
+      InteractionResult result = handleUpgradeInteraction(state, world, pos, player, hit, upgradeType, stack);
+      return result == InteractionResult.CONSUME ? ItemInteractionResult.CONSUME
+          : ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+    }
+
+    return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+  }
+
+  @Override
   public InteractionResult useWithoutItem(BlockState state, Level world, BlockPos pos,
       Player player, BlockHitResult hit) {
     if (world.isClientSide())
       return InteractionResult.SUCCESS;
 
-    ItemStack heldItem = player.getMainHandItem();
-
-    if (heldItem.is(ModItems.WRENCH)) {
-      return handleWrenchInteraction(state, world, pos, player, hit);
+    // Empty hand right-click on destination = open filter GUI
+    // Empty hand + sneak = clear filter
+    if (player.isShiftKeyDown()) {
+      return handleClearFilterInteraction(state, world, pos, player, hit);
     }
 
-    PipeUpgradeType upgradeType = PipeUpgradeType.fromItem(heldItem.getItem());
-    if (upgradeType != null) {
-      return handleUpgradeInteraction(state, world, pos, player, hit, upgradeType, heldItem);
+    return handleFilterInteraction(state, world, pos, player, hit);
+  }
+
+  private InteractionResult handleFilterInteraction(BlockState state, Level world, BlockPos pos,
+      Player player, BlockHitResult hit) {
+    Direction closestDirection = findClosestConnection(state, hit);
+    if (closestDirection == null)
+      return InteractionResult.PASS;
+
+    EnumProperty<PipeSideState> prop = getPropertyFor(closestDirection);
+    PipeSideState sideState = state.getValue(prop);
+
+    // Only allow filters on destination connections (not source, not none)
+    if (sideState != PipeSideState.DESTINATION) {
+      return InteractionResult.PASS;
+    }
+
+    BlockEntity be = world.getBlockEntity(pos);
+    if (!(be instanceof PipeBlockEntity)) {
+      return InteractionResult.PASS;
+    }
+
+    // Open filter GUI
+    final Direction filterDir = closestDirection;
+    player.openMenu(new ExtendedScreenHandlerFactory<DestinationFilterMenu.FilterData>() {
+      @Override
+      public DestinationFilterMenu.FilterData getScreenOpeningData(ServerPlayer serverPlayer) {
+        return new DestinationFilterMenu.FilterData(pos, filterDir);
+      }
+
+      @Override
+      public Component getDisplayName() {
+        return Component.translatable("simplypipes.gui.filter.title");
+      }
+
+      @Override
+      public AbstractContainerMenu createMenu(int syncId, Inventory inventory, Player p) {
+        return new DestinationFilterMenu(syncId, inventory, pos, filterDir);
+      }
+    });
+
+    return InteractionResult.CONSUME;
+  }
+
+  private InteractionResult handleClearFilterInteraction(BlockState state, Level world, BlockPos pos,
+      Player player, BlockHitResult hit) {
+    Direction closestDirection = findClosestConnection(state, hit);
+    if (closestDirection == null)
+      return InteractionResult.PASS;
+
+    EnumProperty<PipeSideState> prop = getPropertyFor(closestDirection);
+    PipeSideState sideState = state.getValue(prop);
+
+    // Only clear filters on destination connections
+    if (sideState != PipeSideState.DESTINATION) {
+      return InteractionResult.PASS;
+    }
+
+    BlockEntity be = world.getBlockEntity(pos);
+    if (!(be instanceof PipeBlockEntity pipeEntity)) {
+      return InteractionResult.PASS;
+    }
+
+    // Only consume interaction if there was a filter to clear
+    if (pipeEntity.hasDestinationFilter(closestDirection)) {
+      pipeEntity.clearDestinationFilter(closestDirection);
+      return InteractionResult.CONSUME;
     }
 
     return InteractionResult.PASS;
@@ -308,6 +410,11 @@ public class Pipe extends Block implements EntityBlock, SimpleWaterloggedBlock {
         if (upgradeDrop != null && !upgradeDrop.isEmpty()) {
           Containers.dropItemStack(world, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, upgradeDrop);
         }
+      }
+
+      // Clear destination filter when changing away from DESTINATION
+      if (current == PipeSideState.DESTINATION && next != PipeSideState.DESTINATION) {
+        pipeEntity.clearDestinationFilter(closestDirection);
       }
 
       if (next == PipeSideState.NONE)

@@ -1,6 +1,7 @@
 package com.omarlawatey.blocks.pipe;
 
 import com.omarlawatey.blocks.pipe.network.DestinationAccess;
+import com.omarlawatey.blocks.pipe.network.DestinationFilter;
 import com.omarlawatey.blocks.pipe.network.NetworkScanner;
 import com.omarlawatey.blocks.pipe.network.NetworkState;
 import com.omarlawatey.blocks.pipe.transfer.ItemTransferHandler;
@@ -16,6 +17,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -23,11 +25,14 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
 
+import org.jetbrains.annotations.Nullable;
+
 import java.util.*;
 
 public class PipeBlockEntity extends BlockEntity {
   private final Set<Direction> lockedDirections = EnumSet.noneOf(Direction.class);
   private final PipeUpgradeSlot upgradeSlot = new PipeUpgradeSlot(this);
+  private final Map<Direction, DestinationFilter> destinationFilters = new EnumMap<>(Direction.class);
 
   private static final Direction[] DIRECTIONS = Direction.values();
   private static final int BASE_TRANSFER_COOLDOWN = 8;
@@ -56,6 +61,107 @@ public class PipeBlockEntity extends BlockEntity {
   public PipeUpgradeSlot getUpgradeSlot() {
     return upgradeSlot;
   }
+
+  // ===== Destination Filter Methods =====
+
+  /**
+   * Gets the destination filter for a specific direction
+   */
+  @Nullable
+  public DestinationFilter getDestinationFilter(Direction direction) {
+    return destinationFilters.get(direction);
+  }
+
+  /**
+   * Sets a destination filter for a specific direction
+   * 
+   * @param direction  the direction to set the filter for
+   * @param filterItem the item to filter (null to clear)
+   * @param blacklist  if true, blocks the item instead of allowing only it
+   * @return the previous filter item, or null if there was none
+   */
+  @Nullable
+  public Item setDestinationFilter(Direction direction, @Nullable Item filterItem, boolean blacklist) {
+    Item previousItem = null;
+    DestinationFilter existing = destinationFilters.get(direction);
+    if (existing != null) {
+      previousItem = existing.getFilterItem();
+    }
+
+    if (filterItem != null) {
+      DestinationFilter filter = new DestinationFilter(filterItem, blacklist);
+      destinationFilters.put(direction, filter);
+    } else {
+      destinationFilters.remove(direction);
+    }
+
+    invalidateNetworkCache();
+    setChanged();
+    syncToClient();
+    return previousItem;
+  }
+
+  /**
+   * Sets a destination filter for a specific direction
+   * 
+   * @param direction the direction to set the filter for
+   * @param filter    the filter to set
+   */
+  public void setDestinationFilter(Direction direction, DestinationFilter filter) {
+    if (filter == null || filter.isEmpty()) {
+      destinationFilters.remove(direction);
+    } else {
+      destinationFilters.put(direction, filter);
+    }
+    invalidateNetworkCache();
+    setChanged();
+    syncToClient();
+  }
+
+  /**
+   * Sets a destination filter for a specific direction (whitelist mode)
+   * 
+   * @return the previous filter item, or null if there was none
+   */
+  @Nullable
+  public Item setDestinationFilter(Direction direction, @Nullable Item filterItem) {
+    return setDestinationFilter(direction, filterItem, false);
+  }
+
+  /**
+   * Clears the destination filter for a specific direction
+   * 
+   * @return the previous filter item, or null if there was none
+   */
+  @Nullable
+  public Item clearDestinationFilter(Direction direction) {
+    Item previousItem = null;
+    DestinationFilter existing = destinationFilters.get(direction);
+    if (existing != null) {
+      previousItem = existing.getFilterItem();
+    }
+    destinationFilters.remove(direction);
+    invalidateNetworkCache();
+    setChanged();
+    syncToClient();
+    return previousItem;
+  }
+
+  /**
+   * Checks if a direction has a destination filter
+   */
+  public boolean hasDestinationFilter(Direction direction) {
+    DestinationFilter filter = destinationFilters.get(direction);
+    return filter != null && !filter.isEmpty();
+  }
+
+  public void syncToClient() {
+    if (level != null && !level.isClientSide()) {
+      level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+    }
+  }
+
+  // ===== End Destination Filter Methods =====
 
   public int getTransferCooldown(Direction direction) {
     if (upgradeCacheDirty) {
@@ -216,10 +322,13 @@ public class PipeBlockEntity extends BlockEntity {
     for (SourceInfo source : sources) {
       long extractAmount = getExtractionAmount(source.direction);
 
-      ItemTransferHandler.ItemExtractionResult extraction = ItemTransferHandler.extractItems(
+      // Use destination-aware extraction to only pull items that can actually be
+      // delivered
+      ItemTransferHandler.ItemExtractionResult extraction = ItemTransferHandler.extractItemsWithDestinationCheck(
           source.storage,
           extractAmount,
-          item -> canTransfer(source.direction, item));
+          item -> canTransfer(source.direction, item),
+          validDestinations);
 
       if (extraction.isEmpty()) {
         continue;
@@ -305,6 +414,17 @@ public class PipeBlockEntity extends BlockEntity {
     }
     tag.putByte("LockedDirections", locked);
     upgradeSlot.save(tag);
+
+    // Save destination filters
+    if (!destinationFilters.isEmpty()) {
+      CompoundTag filtersTag = new CompoundTag();
+      for (Map.Entry<Direction, DestinationFilter> entry : destinationFilters.entrySet()) {
+        if (entry.getValue() != null && !entry.getValue().isEmpty()) {
+          filtersTag.put(entry.getKey().getName(), entry.getValue().save());
+        }
+      }
+      tag.put("DestinationFilters", filtersTag);
+    }
   }
 
   @Override
@@ -318,6 +438,22 @@ public class PipeBlockEntity extends BlockEntity {
       }
     }
     upgradeSlot.load(tag);
+
+    // Load destination filters
+    destinationFilters.clear();
+    if (tag.contains("DestinationFilters")) {
+      CompoundTag filtersTag = tag.getCompound("DestinationFilters");
+      for (Direction dir : DIRECTIONS) {
+        String dirName = dir.getName();
+        if (filtersTag.contains(dirName)) {
+          DestinationFilter filter = DestinationFilter.load(filtersTag.getCompound(dirName));
+          if (filter != null && !filter.isEmpty()) {
+            destinationFilters.put(dir, filter);
+          }
+        }
+      }
+    }
+
     cachedDestinations = null;
     networkState = null;
   }

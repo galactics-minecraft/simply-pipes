@@ -7,12 +7,14 @@ import com.omarlawatey.SimplyPipes;
 import com.omarlawatey.blocks.pipe.Pipe;
 import com.omarlawatey.blocks.pipe.PipeBlockEntity;
 import com.omarlawatey.blocks.pipe.PipeSideState;
+import com.omarlawatey.blocks.pipe.network.DestinationFilter;
 import com.omarlawatey.blocks.pipe.upgrade.PipeUpgrade;
 
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.state.BlockState;
 import snownee.jade.api.BlockAccessor;
 import snownee.jade.api.IBlockComponentProvider;
@@ -98,6 +100,38 @@ public enum JadeComponentProvider implements IBlockComponentProvider, IServerDat
         }
       }
     }
+
+    // Display destination filters
+    if (serverData.contains("DestinationFilters")) {
+      CompoundTag filtersTag = serverData.getCompound("DestinationFilters");
+
+      boolean hasFilters = false;
+      for (Direction dir : Direction.values()) {
+        if (filtersTag.contains(dir.getName())) {
+          hasFilters = true;
+          break;
+        }
+      }
+
+      if (hasFilters) {
+        tooltip.add(Component.translatable("simplypipes.jade.filters"));
+
+        for (Direction dir : Direction.values()) {
+          if (filtersTag.contains(dir.getName())) {
+            CompoundTag filterTag = filtersTag.getCompound(dir.getName());
+            DestinationFilter filter = DestinationFilter.load(filterTag);
+            Item filterItem = filter.getFilterItem();
+
+            if (filterItem != null) {
+              String dirName = dir.getName().substring(0, 1).toUpperCase() + dir.getName().substring(1);
+              String itemName = filterItem.getDescription().getString();
+              String filterMode = filter.isBlacklist() ? "§c✗ " : "§a✓ ";
+              tooltip.add(Component.literal("  " + dirName + ": " + filterMode + itemName));
+            }
+          }
+        }
+      }
+    }
   }
 
   private String formatUpgradeName(String typeId) {
@@ -127,6 +161,18 @@ public enum JadeComponentProvider implements IBlockComponentProvider, IServerDat
       }
       if (!upgradesTag.isEmpty()) {
         data.put("Upgrades", upgradesTag);
+      }
+
+      // Send destination filter data
+      CompoundTag filtersTag = new CompoundTag();
+      for (Direction dir : Direction.values()) {
+        DestinationFilter filter = pipeEntity.getDestinationFilter(dir);
+        if (filter != null && !filter.isEmpty()) {
+          filtersTag.put(dir.getName(), filter.save());
+        }
+      }
+      if (!filtersTag.isEmpty()) {
+        data.put("DestinationFilters", filtersTag);
       }
     }
   }

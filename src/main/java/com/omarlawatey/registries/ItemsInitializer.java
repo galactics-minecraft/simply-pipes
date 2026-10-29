@@ -3,6 +3,7 @@ package com.omarlawatey.registries;
 import com.omarlawatey.utils.ModBlockEntities;
 import com.omarlawatey.utils.ModBlocks;
 import com.omarlawatey.utils.ModItems;
+import com.omarlawatey.utils.ModMenus;
 import com.omarlawatey.utils.ModUpgrades;
 
 public class ItemsInitializer {
@@ -11,6 +12,7 @@ public class ItemsInitializer {
     ModBlockEntities.initialize();
     ModItems.initialize();
     ModUpgrades.initialize();
+    ModMenus.initialize();
 
     ItemsGroup.initialize(ModBlocks.PIPE.asItem());
     ItemsGroup.addItemsToItemGroup(
