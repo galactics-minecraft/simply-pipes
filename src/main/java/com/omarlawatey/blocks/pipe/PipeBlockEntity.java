@@ -40,8 +40,6 @@ public class PipeBlockEntity extends BlockEntity {
   private NetworkState networkState = null;
   private int transferTimer = 0;
   private List<DestinationAccess> cachedDestinations = null;
-  private Map<DestinationAccess, Storage<ItemVariant>> cachedStorages = null;
-  private List<DestinationAccess> validDestinations = null;
 
   private int cachedMinCooldown = BASE_TRANSFER_COOLDOWN;
   private boolean cooldownDirty = true;
@@ -233,13 +231,11 @@ public class PipeBlockEntity extends BlockEntity {
   }
 
   public void invalidateCache() {
-    this.cachedDestinations = null;
-    this.cachedStorages = null;
-    this.validDestinations = null;
-    this.networkState = null;
-    this.cooldownDirty = true;
-    this.upgradeCacheDirty = true;
-  }
+  this.cachedDestinations = null;
+  this.networkState = null;
+  this.cooldownDirty = true;
+  this.upgradeCacheDirty = true;
+}
 
   public void invalidateUpgradeCache() {
     this.upgradeCacheDirty = true;
@@ -294,60 +290,36 @@ public class PipeBlockEntity extends BlockEntity {
   }
 
   private void transferItems(Level level, BlockPos pos, BlockState state) {
-    List<SourceInfo> sources = findSourceStorages(level, state);
-    if (sources.isEmpty()) {
-      return;
-    }
+  List<SourceInfo> sources = findSourceStorages(level, state);
+  if (sources.isEmpty()) {
+    return;
+  }
 
-    sources = deduplicateSources(sources);
+  sources = deduplicateSources(sources);
 
-    List<DestinationAccess> destinations = getDestinations(level, pos);
-    if (destinations.isEmpty())
-      return;
+  List<DestinationAccess> destinations = getDestinations(level, pos);
+  if (destinations.isEmpty()) {
+    return;
+  }
 
-    if (cachedStorages == null || cachedStorages.size() != destinations.size()) {
-      cachedStorages = new HashMap<>();
-      validDestinations = new ArrayList<>();
-      for (DestinationAccess dest : destinations) {
-        Storage<ItemVariant> storage = ItemStorage.SIDED.find(level, dest.pos(), dest.accessDirection());
-        if (storage != null) {
-          cachedStorages.put(dest, storage);
-          validDestinations.add(dest);
-        }
-      }
-    }
+  NetworkState netState = NetworkScanner.getOrCreateNetworkState(level, pos);
 
-    NetworkState netState = NetworkScanner.getOrCreateNetworkState(level, pos);
+  for (SourceInfo source : sources) {
+    long moved = ItemTransferHandler.transfer(
+        source.storage,
+        getExtractionAmount(source.direction),
+        item -> canTransfer(source.direction, item),
+        destinations,
+        netState,
+        dest -> level.isLoaded(dest.pos())
+            ? ItemStorage.SIDED.find(level, dest.pos(), dest.accessDirection())
+            : null);
 
-    for (SourceInfo source : sources) {
-      long extractAmount = getExtractionAmount(source.direction);
-
-      // Use destination-aware extraction to only pull items that can actually be
-      // delivered
-      ItemTransferHandler.ItemExtractionResult extraction = ItemTransferHandler.extractItemsWithDestinationCheck(
-          source.storage,
-          extractAmount,
-          item -> canTransfer(source.direction, item),
-          validDestinations);
-
-      if (extraction.isEmpty()) {
-        continue;
-      }
-
-      long remaining = ItemTransferHandler.distributeEvenly(
-          extraction.variant(),
-          extraction.amount(),
-          validDestinations,
-          netState,
-          cachedStorages::get);
-
-      if (remaining > 0) {
-        ItemTransferHandler.returnToSource(source.storage, extraction.variant(), remaining);
-      } else {
-        setChanged();
-      }
+    if (moved > 0) {
+      setChanged();
     }
   }
+}
 
   // Uses IdentityHashMap to handle double chests that share the same Storage
   // instance
